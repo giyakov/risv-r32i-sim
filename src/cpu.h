@@ -35,8 +35,8 @@ public:
 
 struct MMU final {
 public:
-    HUExceptionType Load(CPU &cpu, u32_t a, u32_t *dst);
-    HUExceptionType Store(CPU &cpu, u32_t a, u32_t data);
+    HUExceptionType Load(CPU &cpu, u32_t a, u32_t *dst, CUMemOp memOp = CUMemOp::WORD);
+    HUExceptionType Store(CPU &cpu, u32_t a, u32_t data, CUMemOp memOp = CUMemOp::WORD);
 
     std::vector<u32_t> memory = {};
 };
@@ -57,7 +57,7 @@ public:
         Instruction inst = {};
         u32_t pc = 0;
         u32_t pcNext = 0;
-        bool v = false;
+        bool v = true;
     };
     TickState<State> state = {};
 

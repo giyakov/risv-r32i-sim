@@ -7,6 +7,7 @@ add_executable(huawei-riscv-rv32i-sim
     src/main.cpp
     src/isa.cpp
     src/cpu.cpp
+    src/cpu_env.cpp
 )
 
 target_include_directories(huawei-riscv-rv32i-sim PRIVATE

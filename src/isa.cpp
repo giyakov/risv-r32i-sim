@@ -53,7 +53,7 @@ static CUExecParams BuildBranch()
     return params;
 }
 
-template <CUMemOp memOp, bool sgne>
+template<CUMemOp memOp, bool signExt>
 static CUExecParams BuildLoad()
 {
     CUExecParams params = {};
@@ -64,11 +64,12 @@ static CUExecParams BuildLoad()
     params.aluOp = CUALUOp::ADD;
     params.resSrc = CUResSrc::MEM;
     params.memOp = memOp;
-    params.memSignExt = sgne;
+    params.memSignExt = signExt;
     params.isOpcodeOk = true;
     return params;
 }
 
+template<CUMemOp memOp>
 static CUExecParams BuildStore()
 {
     CUExecParams params = {};
@@ -77,17 +78,18 @@ static CUExecParams BuildStore()
     params.aluSrc2 = CUALUSrc::IMM;
     params.aluOp = CUALUOp::ADD;
     params.memWrite = true;
-    params.memOp = CUMemOp::WORD;
+    params.memOp = memOp;
     params.memSignExt = false;
     params.isOpcodeOk = true;
     return params;
 }
 
-static CUExecParams BuildEcall()
+template<bool isInt>
+static CUExecParams BuildSystem()
 {
     CUExecParams params = {};
     params.iType = InstructionType::I;
-    params.intpt = true;
+    params.intpt = isInt;
     params.isOpcodeOk = true;
     return params;
 }
@@ -113,20 +115,26 @@ ISAEntryDescription const isaDescription[] = {
         BuildBranch<CUCmpOp::LTU>() }, // 8
     ISAEntryDescription{ "BGEU",   ISAEntry::BGEU,   Opcode::BRANCH,   InstructionType::B, 0b111, 0b0000000, 
         BuildBranch<CUCmpOp::GEU>() }, // 9
-    ISAEntryDescription{ "LB",     ISAEntry::LB,     Opcode::LOAD,     InstructionType::I, 0b000, 0b0000000,  }, // 10
-    ISAEntryDescription{ "LH",     ISAEntry::LH,     Opcode::LOAD,     InstructionType::I, 0b001, 0b0000000,  }, // 11
+    ISAEntryDescription{ "LB",     ISAEntry::LB,     Opcode::LOAD,     InstructionType::I, 0b000, 0b0000000,
+        BuildLoad<CUMemOp::BYTE, true>()}, // 10
+    ISAEntryDescription{ "LH",     ISAEntry::LH,     Opcode::LOAD,     InstructionType::I, 0b001, 0b0000000,
+        BuildLoad<CUMemOp::HALF, true>()}, // 11
     ISAEntryDescription{ "LW",     ISAEntry::LW,     Opcode::LOAD,     InstructionType::I, 0b010, 0b0000000, 
         BuildLoad<CUMemOp::WORD, false>() }, // 12
     ISAEntryDescription{ "LBU",    ISAEntry::LBU,    Opcode::LOAD,     InstructionType::I, 0b100, 0b0000000, 
         BuildLoad<CUMemOp::BYTE, false>() }, // 13
-    ISAEntryDescription{ "LHU",    ISAEntry::LHU,    Opcode::LOAD,     InstructionType::I, 0b101, 0b0000000,  }, // 14
-    ISAEntryDescription{ "SB",     ISAEntry::SB,     Opcode::STORE,    InstructionType::S, 0b000, 0b0000000,  }, // 15
-    ISAEntryDescription{ "SH",     ISAEntry::SH,     Opcode::STORE,    InstructionType::S, 0b001, 0b0000000,  }, // 16
+    ISAEntryDescription{ "LHU",    ISAEntry::LHU,    Opcode::LOAD,     InstructionType::I, 0b101, 0b0000000,
+        BuildLoad<CUMemOp::HALF, false>()}, // 14
+    ISAEntryDescription{ "SB",     ISAEntry::SB,     Opcode::STORE,    InstructionType::S, 0b000, 0b0000000,
+        BuildStore<CUMemOp::BYTE>() }, // 15
+    ISAEntryDescription{ "SH",     ISAEntry::SH,     Opcode::STORE,    InstructionType::S, 0b001, 0b0000000,
+        BuildStore<CUMemOp::HALF>() }, // 16
     ISAEntryDescription{ "SW",     ISAEntry::SW,     Opcode::STORE,    InstructionType::S, 0b010, 0b0000000, 
-        BuildStore() }, // 17
+        BuildStore<CUMemOp::WORD>() }, // 17
     ISAEntryDescription{ "ADDI",   ISAEntry::ADDI,   Opcode::OP_IMM,   InstructionType::I, 0b000, 0b0000000, 
         BuildArithm<InstructionType::I, CUALUOp::ADD>() }, // 18
-    ISAEntryDescription{ "SLTI",   ISAEntry::SLTI,   Opcode::OP_IMM,   InstructionType::I, 0b010, 0b0000000,  }, // 19
+    ISAEntryDescription{ "SLTI",   ISAEntry::SLTI,   Opcode::OP_IMM,   InstructionType::I, 0b010, 0b0000000,
+        BuildArithm<InstructionType::I, CUALUOp::SLT>() }, // 19
     ISAEntryDescription{ "SLTIU",  ISAEntry::SLTIU,  Opcode::OP_IMM,   InstructionType::I, 0b011, 0b0000000, 
         BuildArithm<InstructionType::I, CUALUOp::SLTU>() }, // 20
     ISAEntryDescription{ "XORI",   ISAEntry::XORI,   Opcode::OP_IMM,   InstructionType::I, 0b100, 0b0000000, 
@@ -147,23 +155,28 @@ ISAEntryDescription const isaDescription[] = {
         BuildArithm<InstructionType::R, CUALUOp::SUB>() }, // 28
     ISAEntryDescription{ "SLL",    ISAEntry::SLL,    Opcode::OP,       InstructionType::R, 0b001, 0b0000000, 
         BuildArithm<InstructionType::R, CUALUOp::SLL>() }, // 29
-    ISAEntryDescription{ "SLT",    ISAEntry::SLT,    Opcode::OP,       InstructionType::R, 0b010, 0b0000000,  }, // 30
+    ISAEntryDescription{ "SLT",    ISAEntry::SLT,    Opcode::OP,       InstructionType::R, 0b010, 0b0000000,
+        BuildArithm<InstructionType::R, CUALUOp::SLT>() }, // 30
     ISAEntryDescription{ "SLTU",   ISAEntry::SLTU,   Opcode::OP,       InstructionType::R, 0b011, 0b0000000, 
         BuildArithm<InstructionType::R, CUALUOp::SLTU>() }, // 31
     ISAEntryDescription{ "XOR",    ISAEntry::XOR,    Opcode::OP,       InstructionType::R, 0b100, 0b0000000, 
         BuildArithm<InstructionType::R, CUALUOp::XOR>() }, // 32
     ISAEntryDescription{ "SRL",    ISAEntry::SRL,    Opcode::OP,       InstructionType::R, 0b101, 0b0000000, 
         BuildArithm<InstructionType::R, CUALUOp::SRL>() }, // 33
-    ISAEntryDescription{ "SRA",    ISAEntry::SRA,    Opcode::OP,       InstructionType::R, 0b101, 0b0100000,  }, // 34
+    ISAEntryDescription{ "SRA",    ISAEntry::SRA,    Opcode::OP,       InstructionType::R, 0b101, 0b0100000,
+        BuildArithm<InstructionType::R, CUALUOp::SRA>() }, // 34
     ISAEntryDescription{ "OR",     ISAEntry::OR,     Opcode::OP,       InstructionType::R, 0b110, 0b0000000, 
         BuildArithm<InstructionType::R, CUALUOp::OR>() }, // 35
     ISAEntryDescription{ "AND",    ISAEntry::AND,    Opcode::OP,       InstructionType::R, 0b111, 0b0000000, 
         BuildArithm<InstructionType::R, CUALUOp::AND>() }, // 36
-    ISAEntryDescription{ "FENCE",  ISAEntry::FENCE,  Opcode::MISC_MEM, InstructionType::I, 0b000, 0b0000000,  }, // 37
-    ISAEntryDescription{ "ECALL",  ISAEntry::ECALL,  Opcode::SYSTEM,   InstructionType::I, 0b000, 0b0000000,  }, // 38
-    ISAEntryDescription{ "EBREAK", ISAEntry::EBREAK, Opcode::SYSTEM,   InstructionType::I, 0b000, 0b0000000, 
-        BuildEcall() }, // 39
-    ISAEntryDescription{ "UNKNOWN",ISAEntry::UNKNOWN,Opcode::UNKNOWN,  InstructionType::UNKNOWN_TYPE } // 40
+    ISAEntryDescription{ "FENCE",  ISAEntry::FENCE,  Opcode::MISC_MEM, InstructionType::I, 0b000, 0b0000000,
+        BuildSystem<false>() }, // 37
+    ISAEntryDescription{ "ECALL",  ISAEntry::ECALL,  Opcode::SYSTEM,   InstructionType::I, 0b000, 0b0000000,
+        BuildSystem<true>() }, // 38
+    ISAEntryDescription{ "EBREAK", ISAEntry::EBREAK, Opcode::SYSTEM, InstructionType::I, 0b000, 0b0000000,
+        BuildSystem<true>() }, // 39
+    ISAEntryDescription{ "UNKNOWN",ISAEntry::UNKNOWN,Opcode::UNKNOWN,  InstructionType::UNKNOWN_TYPE, 0, 0,
+        CUExecParams{ .isOpcodeOk = false }} // 40
 };
 
  ISAEntryDescription const &UnpackISAEntryDescription(Instruction instr)

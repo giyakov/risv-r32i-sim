@@ -1,44 +1,9 @@
-#include "cpu.h"
-#include "types.h"
+#include "cpu_env.h"
 
 #include <cassert>
-#include <bit>
 #include <cstring>
-#include <iostream>
 
-struct CPUEnv final {
-public:
-    Sim::CPU cpu = {};
-
-    static constexpr u32_t TVEC_HANDLER_SIZE = 16;
-
-    CPUEnv(void *mem, u32_t memSize = 4096, u32_t tvec = 4096 - TVEC_HANDLER_SIZE)
-    {
-        assert(mem && (memSize % sizeof(u32_t) == 0) && "Invalid memory");
-
-        cpu.mmu.memory.resize(memSize / sizeof(u32_t));
-        for (u32_t i = 0; i < memSize / sizeof(u32_t); ++i) {
-            cpu.mmu.memory[i] = *(u32_t *)((u8_t *)mem + i * sizeof(u32_t));
-        }
-
-        u32_t mov00 = 0x00002023;
-
-        (&cpu.mmu.memory[cpu.tvec / sizeof(u32_t)])[0] = mov00;
-        (&cpu.mmu.memory[cpu.tvec / sizeof(u32_t)])[1] = mov00;
-        (&cpu.mmu.memory[cpu.tvec / sizeof(u32_t)])[2] = mov00;
-        (&cpu.mmu.memory[cpu.tvec / sizeof(u32_t)])[3] = mov00;
-        cpu.shutdown = false;
-    }
-    void Execute(u32_t pc);
-};
-
-void CPUEnv::Execute(u32_t pc)
-{
-    cpu.fetchStage.state.read.pc = pc;
-    cpu.Execute();
-}
-
-void test_0()
+void Test0()
 {
     auto memory = std::vector<u32_t>(4096, 0);
 
@@ -47,15 +12,14 @@ void test_0()
     };
     std::memcpy(memory.data() + 1024 / sizeof(u32_t), code, sizeof(code));
 
-    auto env = CPUEnv(memory.data(), std::size(memory) * sizeof(u32_t),
-        std::size(memory) * sizeof(u32_t) - CPUEnv::TVEC_HANDLER_SIZE);
+    auto env = Sim::CPUEnv(memory.data(), std::size(memory) * sizeof(u32_t),
+        std::size(memory) * sizeof(u32_t) - Sim::CPUEnv::TVEC_HANDLER_SIZE);
 
-    std::cout << "**************** test_0\n";
     env.Execute(1024);
     assert(env.cpu.huModule.exceptionPC == 1024);
 }
 
-void test_1()
+void Test1()
 {
     auto memory = std::vector<u32_t>(4096, 0);
     u32_t const code[] = {
@@ -66,13 +30,12 @@ void test_1()
         0x00100073U  // ebreak
     };
     std::memcpy(memory.data() + 1024 / sizeof(u32_t), code, sizeof(code));
-    auto env = CPUEnv(memory.data(), std::size(memory) * sizeof(u32_t),
-        std::size(memory) * sizeof(u32_t) - CPUEnv::TVEC_HANDLER_SIZE);
+    auto env = Sim::CPUEnv(memory.data(), std::size(memory) * sizeof(u32_t),
+        std::size(memory) * sizeof(u32_t) - Sim::CPUEnv::TVEC_HANDLER_SIZE);
 
     env.cpu.mmu.memory[8] = 0x21323424;
     env.cpu.mmu.memory[9] = 0xdeadbabe;
 
-    std::cout << "**************** test_1\n";
     env.Execute(1024);
     assert(env.cpu.huModule.exceptionPC == 1024 + 4 * sizeof(u32_t));
 
@@ -80,7 +43,7 @@ void test_1()
     assert(env.cpu.mmu.memory[10] == 0xdeadbabe - 0x21323424);
 }
 
-void test_2()
+void Test2()
 {
     auto memory = std::vector<u32_t>(4096, 0);
     u32_t const code[] = {
@@ -90,10 +53,9 @@ void test_2()
         0x00100073U  // ebreak
     };
     std::memcpy(memory.data() + 1024 / sizeof(u32_t), code, sizeof(code));
-    auto env = CPUEnv(memory.data(), std::size(memory) * sizeof(u32_t),
-        std::size(memory) * sizeof(u32_t) - CPUEnv::TVEC_HANDLER_SIZE);
+    auto env = Sim::CPUEnv(memory.data(), std::size(memory) * sizeof(u32_t),
+        std::size(memory) * sizeof(u32_t) - Sim::CPUEnv::TVEC_HANDLER_SIZE);
 
-    std::cout << "**************** test_2\n";
     env.Execute(1024);
     assert(env.cpu.huModule.exceptionPC == 1024 + 4 * 3);
 
@@ -102,7 +64,7 @@ void test_2()
     assert(env.cpu.decodeStage.regfile.gpr[12] == 321);
 }
 
-void test_3()
+void Test3()
 {
     auto memory = std::vector<u32_t>(4096, 0);
     u32_t const code[] = {
@@ -120,10 +82,9 @@ void test_3()
         0x00008067U  // jr ra
     };
     std::memcpy(memory.data() + 1024 / sizeof(u32_t), code, sizeof(code));
-    auto env = CPUEnv(memory.data(), std::size(memory) * sizeof(u32_t),
-        std::size(memory) * sizeof(u32_t) - CPUEnv::TVEC_HANDLER_SIZE);
+    auto env = Sim::CPUEnv(memory.data(), std::size(memory) * sizeof(u32_t),
+        std::size(memory) * sizeof(u32_t) - Sim::CPUEnv::TVEC_HANDLER_SIZE);
 
-    std::cout << "**************** test_3\n";
     env.Execute(1024);
     assert(env.cpu.huModule.exceptionPC == 1024 + 4 * 2);
 
@@ -132,7 +93,7 @@ void test_3()
     assert(env.cpu.decodeStage.regfile.gpr[10] == 0);
 }
 
-void test_4()
+void Test4()
 {
     auto memory = std::vector<u32_t>(4096, 0);
     u32_t const code[] = {
@@ -162,10 +123,9 @@ void test_4()
         0x00008067U  // jr ra
     };
     std::memcpy(memory.data() + 1024 / sizeof(u32_t), code, sizeof(code));
-    auto env = CPUEnv(memory.data(), std::size(memory) * sizeof(u32_t),
-        std::size(memory) * sizeof(u32_t) - CPUEnv::TVEC_HANDLER_SIZE);
+    auto env = Sim::CPUEnv(memory.data(), std::size(memory) * sizeof(u32_t),
+        std::size(memory) * sizeof(u32_t) - Sim::CPUEnv::TVEC_HANDLER_SIZE);
 
-    std::cout << "**************** test_4\n";
     env.Execute(1024);
     assert(env.cpu.huModule.exceptionPC == 1024 + 4 * 2);
 
@@ -174,46 +134,13 @@ void test_4()
     assert(env.cpu.decodeStage.regfile.gpr[10] == 6);
 }
 
-void test_5()
-{
-    auto memory = std::vector<u32_t>(4096, 0);
-    /* multiplication via loop, recursive fact */
-    u32_t const code[] = {
-        0x40000113U, 0x0c4000efU, 0x00100073U, 0x00000013U, 0xfd010113U, 0x02812623U, 0x03010413U, 0xfca42e23U,
-        0xfcb42c23U, 0xfe042623U, 0xfe042423U, 0x0200006fU, 0xfec42703U, 0xfd842783U, 0x00f707b3U, 0xfef42623U,
-        0xfe842783U, 0x00178793U, 0xfef42423U, 0xfe842703U, 0xfdc42783U, 0xfcf74ee3U, 0xfec42783U, 0x00078513U,
-        0x02c12403U, 0x03010113U, 0x00008067U, 0xfe010113U, 0x00112e23U, 0x00812c23U, 0x02010413U, 0xfea42623U,
-        0xfec42783U, 0x02078663U, 0xfec42783U, 0xfff78793U, 0x00078513U, 0xfd9ff0efU, 0x00050793U, 0x00078593U,
-        0xfec42503U, 0xf6dff0efU, 0x00050793U, 0x0080006fU, 0x00100793U, 0x00078513U, 0x01c12083U, 0x01812403U,
-        0x02010113U, 0x00008067U, 0xff010113U, 0x00112623U, 0x00812423U, 0x01010413U, 0x00500513U, 0xf91ff0efU,
-        0x00050793U, 0x00078513U, 0x00c12083U, 0x00812403U, 0x01010113U, 0x00008067U
-    };
-
-    std::memcpy(memory.data() + 1024 / sizeof(u32_t), code, sizeof(code));
-    auto env = CPUEnv(memory.data(), std::size(memory) * sizeof(u32_t),
-        std::size(memory) * sizeof(u32_t) - CPUEnv::TVEC_HANDLER_SIZE);
-
-    std::cout << "**************** test_5\n";
-    env.Execute(1024);
-    assert(env.cpu.huModule.exceptionPC == 1024 + 4 * 2);
-
-    assert(env.cpu.decodeStage.regfile.gpr[1] == 1024 + 4 * 2);
-    assert(env.cpu.decodeStage.regfile.gpr[2] == 1024);
-    assert(env.cpu.decodeStage.regfile.gpr[10] == 120);
-}
-
-void test()
-{
-    test_0();
-    test_1();
-    test_2();
-    test_3();
-    test_4();
-    test_5();
-}
-
 int main()
 {
-    test();
+    Test0();
+    Test1();
+    Test2();
+    Test3();
+    Test4();
+
     return 0;
 }
